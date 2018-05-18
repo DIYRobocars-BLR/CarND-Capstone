@@ -6,7 +6,7 @@ from styx_msgs.msg import TrafficLightArray, TrafficLight
 from styx_msgs.msg import Lane
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
-from light_classification.tl_classifier_sim import TLClassifier
+from light_classification.tl_classifier import TLClassifier
 import tf
 import cv2
 import yaml
@@ -25,7 +25,7 @@ class TLDetector(object):
 
         self.waypoints_2d = None
         self.waypoint_tree = None
-        
+
         self.has_image = False
 
         sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
@@ -47,7 +47,20 @@ class TLDetector(object):
         self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
 
         self.bridge = CvBridge()
-        self.light_classifier = TLClassifier()
+
+        rp = rospkg.RosPack()
+
+        self.is_sim_run = self.config['simulator_run']
+
+        if self.is_sim_run:
+            model_dir = os.path.join(rp.get_path('tl_detector'), 'light_classification/models/sim/')
+        else:
+            model_dir = os.path.join(rp.get_path('tl_detector'), 'light_classification/models/real/')
+
+        rospy.loginfo('Using model directory {}'.format(model_dir))
+        ssd_inception_model  = os.path.join(model_dir, 'frozen_inference_graph.pb')
+
+        self.light_classifier = TLClassifier(ssd_inception_model)
         self.listener = tf.TransformListener()
 
         self.state = TrafficLight.UNKNOWN
@@ -56,7 +69,7 @@ class TLDetector(object):
         self.state_count = 0
 
         self.loop()
-        
+
     def loop(self):
         rate = rospy.Rate(2) # 1Hz
         while not rospy.is_shutdown():
